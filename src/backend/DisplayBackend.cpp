@@ -1,5 +1,6 @@
 #include "DisplayBackend.h"
 
+#include "OrbitalSettings.h"
 #include "SystemHelpers.h"
 
 #include <QByteArray>
@@ -35,13 +36,11 @@ constexpr auto kScreenOffMethodBacklight = "backlight";
 
 // Fixed settings file: systemd services do not get $HOME, and QSettings
 // user scope silently falls back to defaults when it cannot resolve one
-// (seen on device). An explicit path has no such dependency.
-constexpr auto kSettingsFile = "/etc/orbital/Orbital.conf";
-
+// (seen on device). An explicit path has no such dependency. Shared with
+// the plugin API and the terminal via OrbitalSettings.h.
 QSettings siriusSettings()
 {
-    QDir().mkpath(QString::fromLatin1("/etc/orbital"));
-    return QSettings(QString::fromLatin1(kSettingsFile), QSettings::IniFormat);
+    return Orbital::settings();
 }
 
 QString environmentOrFallback(const char *name, const QString &fallback)

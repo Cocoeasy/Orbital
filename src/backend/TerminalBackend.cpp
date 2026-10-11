@@ -1,5 +1,6 @@
 #include "TerminalBackend.h"
 #include "TerminalLineModel.h"
+#include "OrbitalSettings.h"
 
 #include <QClipboard>
 #include <QColor>
@@ -419,7 +420,7 @@ TerminalBackend::TerminalBackend(QObject *parent)
     , m_lineModel(new TerminalLineModel(this))
     , m_pollTimer(new QTimer(this))
 {
-    QSettings settings;
+    QSettings settings = Orbital::settings();
     m_fontPixelSize = std::clamp(settings.value(QStringLiteral("terminal/fontPixelSize"),
                                                 kDefaultFontPixelSize).toInt(),
                                  kMinFontPixelSize, kMaxFontPixelSize);
@@ -516,7 +517,7 @@ void TerminalBackend::setFontPixelSize(int fontPixelSize)
     }
 
     m_fontPixelSize = clampedFontSize;
-    QSettings settings;
+    QSettings settings = Orbital::settings();
     settings.setValue(QStringLiteral("terminal/fontPixelSize"), m_fontPixelSize);
     emit fontPixelSizeChanged();
 }
@@ -545,7 +546,7 @@ void TerminalBackend::setColorScheme(const QString &name)
         if (scheme.name == name) {
             activeScheme = &scheme;
             m_colorScheme = name;
-            QSettings settings;
+            QSettings settings = Orbital::settings();
             settings.setValue(QStringLiteral("terminal/colorScheme"), name);
             markScreenDirty();
             emit colorSchemeChanged();

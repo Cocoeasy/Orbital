@@ -432,8 +432,7 @@ Rectangle {
         if (terminalMode && terminalTarget) {
             sendTerminalKey(key)
         } else {
-            // 对于普通 TextField，很难模拟特殊键信号
-            console.log("Special Key:", key)
+            // For plain TextFields we cannot synthesise special-key events.
         }
     }
 

@@ -6,6 +6,32 @@
 
 #include <algorithm>
 
+namespace {
+
+// nmcli's terse (-t) output escapes ':' and '\' inside fields with a
+// backslash. Splitting on raw ':' therefore breaks whenever an SSID (or any
+// other field) contains a colon. Split on unescaped ':' instead.
+QStringList splitNmcliTerse(const QString &line)
+{
+    QStringList fields;
+    QString current;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar c = line.at(i);
+        if (c == QLatin1Char('\\') && i + 1 < line.size()) {
+            current.append(line.at(++i));
+        } else if (c == QLatin1Char(':')) {
+            fields.append(current);
+            current.clear();
+        } else {
+            current.append(c);
+        }
+    }
+    fields.append(current);
+    return fields;
+}
+
+} // namespace
+
 WifiBackend::WifiBackend(QObject *parent)
     : QObject(parent)
     , m_wifiTimer(new QTimer(this))
@@ -54,6 +80,7 @@ void WifiBackend::setWifiEnabled(bool enable)
     connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             [this, proc, enable](int exitCode, QProcess::ExitStatus) {
         const bool success = (exitCode == 0);
+        const QString errorMsg = success ? QString() : QString::fromUtf8(proc->readAllStandardError());
         if (success) {
             m_wifiEnabled = enable;
             if (enable) {
@@ -71,10 +98,18 @@ void WifiBackend::setWifiEnabled(bool enable)
             emit wifiEnabledChanged();
         }
 
-        const QString errorMsg = success ? QString() : QString::fromUtf8(proc->readAllStandardError());
         emit wifiOperationResult("toggle", success, errorMsg);
 
         proc->deleteLater();
+    });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError err) {
+        // FailedToStart: finished() is not emitted, so report here. Other
+        // errors are followed by finished(), handled above.
+        if (err == QProcess::FailedToStart) {
+            emit wifiOperationResult("toggle", false, QStringLiteral("nmcli could not be started"));
+            proc->deleteLater();
+        }
     });
 
     proc->start("nmcli", QStringList() << "radio" << "wifi" << state);
@@ -109,6 +144,13 @@ void WifiBackend::connectToWifi(const QString &ssid, const QString &password)
         proc->deleteLater();
     });
 
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError err) {
+        if (err == QProcess::FailedToStart) {
+            emit wifiOperationResult("connect", false, QStringLiteral("nmcli could not be started"));
+            proc->deleteLater();
+        }
+    });
+
     proc->start("nmcli", args);
 }
 
@@ -124,6 +166,13 @@ void WifiBackend::disconnectFromWifi(const QString &ssid)
 
         emit wifiOperationResult("disconnect", success, QString::fromUtf8(proc->readAllStandardError()));
         proc->deleteLater();
+    });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError err) {
+        if (err == QProcess::FailedToStart) {
+            emit wifiOperationResult("disconnect", false, QStringLiteral("nmcli could not be started"));
+            proc->deleteLater();
+        }
     });
 
     proc->start("nmcli", QStringList() << "connection" << "down" << "id" << ssid);
@@ -142,6 +191,13 @@ void WifiBackend::forgetNetwork(const QString &ssid)
 
         emit wifiOperationResult("forget", success, QString::fromUtf8(proc->readAllStandardError()));
         proc->deleteLater();
+    });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError err) {
+        if (err == QProcess::FailedToStart) {
+            emit wifiOperationResult("forget", false, QStringLiteral("nmcli could not be started"));
+            proc->deleteLater();
+        }
     });
 
     proc->start("nmcli", QStringList() << "connection" << "delete" << "id" << ssid);
@@ -185,6 +241,12 @@ void WifiBackend::scanWifiNetworks()
         }
 
         proc->deleteLater();
+    });
+
+    connect(proc, &QProcess::errorOccurred, this, [proc](QProcess::ProcessError err) {
+        if (err == QProcess::FailedToStart) {
+            proc->deleteLater();
+        }
     });
 
     proc->start("nmcli", args);
@@ -294,7 +356,8 @@ void WifiBackend::initWifiEnabled()
 {
     QProcess proc;
     proc.start("nmcli", QStringList() << "radio" << "wifi");
-    proc.waitForFinished();
+    // Bounded: an unbounded wait here blocks app startup if nmcli hangs.
+    proc.waitForFinished(1000);
     m_wifiEnabled = (QString::fromUtf8(proc.readAllStandardOutput()).trimmed() == "enabled");
 }
 
@@ -316,7 +379,7 @@ void WifiBackend::fetchSavedWifiList()
     m_savedAutoConnect.clear();
 
     for (const QString &line : lines) {
-        const QStringList parts = line.split(':');
+        const QStringList parts = splitNmcliTerse(line);
         if (parts.size() < 3) {
             continue;
         }

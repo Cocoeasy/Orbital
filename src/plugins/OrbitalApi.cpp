@@ -1,6 +1,7 @@
 #include "OrbitalApi.h"
 
 #include "../SystemMonitor.h"
+#include "../backend/OrbitalSettings.h"
 
 #include <QDebug>
 #include <QFile>
@@ -180,13 +181,13 @@ void OrbitalApi::popPage()
 
 QVariant OrbitalApi::settingValue(const QString &key, const QVariant &defaultValue)
 {
-    QSettings settings;
+    QSettings settings = Orbital::settings();
     return settings.value(scopedSettingKey(key), defaultValue);
 }
 
 void OrbitalApi::setSettingValue(const QString &key, const QVariant &value)
 {
-    QSettings settings;
+    QSettings settings = Orbital::settings();
     settings.setValue(scopedSettingKey(key), value);
 }
 
